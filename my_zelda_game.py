@@ -14,17 +14,20 @@ WINDOW_WIDTH = 1000
 WINDOW_HEIGHT = 700
 TITLE = "Zelda The Lich King Tales"
 
+# Global music player to prevent multiple instances
+music_player = None
+
 class MenuScreen(arcade.View):
-    def __init__(self):
+    def __init__(self, initial_selected=0):
         super().__init__()
 
         # My menu stuff
         self.raindrops = None
-        self.selected = 0
+        self.selected = initial_selected  # Remember which option was selected
         self.timer = 0.0
         self.sparkles = []
         self.background_texture = None
-        self.music = None
+        self.pulse = 130 + int(30 * math.sin(self.timer * 4))
 
         # What can the player choose?
         self.choices = [
@@ -38,26 +41,12 @@ class MenuScreen(arcade.View):
         # self.make_sparkles()
         self.make_raindrops()
 
-        self.play_menu_theme_song()
-
-
-
     # def make_sparkles(self):
     #     # Add some magic sparkles floating around
     #     for i in range(20):
     #         sparkle = {'x': random.randint(0, WINDOW_WIDTH), 'y': random.randint(0, WINDOW_HEIGHT),
     #                    'speed': random.randint(10, 40), 'size': random.randint(2, 4)}
     #         self.sparkles.append(sparkle)
-    def play_menu_theme_song(self):
-        if self.music is not None:
-            arcade.sound.stop_sound(self.music)
-        elif self.music is None:
-            self.music = arcade.load_sound(MUSIC_FILE)
-            arcade.play_sound(self.music, 0.4, loop=True)
-            print(f"Playing music: {self.music}")
-        else:
-            pass
-
 
     def make_raindrops(self):
         """Create a list of raindrop dictionaries."""
@@ -66,12 +55,14 @@ class MenuScreen(arcade.View):
             drop = {
                 "x": random.randint(0, WINDOW_WIDTH),
                 "y": random.randint(0, WINDOW_HEIGHT),
-                "speed": random.uniform(200, 400),  # pixels per second
+                "speed": random.uniform(600, 1200),  # pixels per second
                 "length": random.randint(12, 20)
             }
             self.raindrops.append(drop)
 
     def on_show_view(self):
+        global music_player
+
         arcade.set_background_color((10, 10, 25, 0))
 
         # Load my cool background if I have one
@@ -81,8 +72,12 @@ class MenuScreen(arcade.View):
         else:
             print("No background image found, using default")
 
-        # Try to play some epic music
-
+        # Try to play some epic music (only if not already playing)
+        if music_player is None:
+            if os.path.exists(MUSIC_FILE):
+                sound = arcade.load_sound(MUSIC_FILE)
+                music_player = arcade.play_sound(sound, volume=0.4, loop=True)
+                print(f"Playing music: {MUSIC_FILE}")
 
     def on_update(self, dt):
         self.timer += dt
@@ -146,7 +141,7 @@ class MenuScreen(arcade.View):
             arcade.draw_line(
                 drop["x"], drop["y"],
                 drop_end_x, drop_end_y,
-                (150, 150, 200), 2)
+                (150, 150, 200), 1)
 
         # Game title with cool red glow
         title_text = "ZELDA THE LICH KING TALES"
@@ -155,26 +150,29 @@ class MenuScreen(arcade.View):
         glow = 0.7 + 0.3 * math.sin(self.timer * 1.2)
         for i in range(5, 0, -1):
             red = int(200 * glow)
-            arcade.draw_text(title_text, WINDOW_WIDTH//2 + i, 580 + i,
+            arcade.draw_text(title_text, WINDOW_WIDTH//2 + i, 460 + i,
                            (red, 0, 0), 40, anchor_x="center")
 
         # Main title
-        arcade.draw_text(title_text, WINDOW_WIDTH//2, 580,
-                        (255, 215, 0), 40, anchor_x="center")
+        pulse = 130 + int(30 * math.sin(self.timer * 4))
+        arcade.draw_text(title_text, WINDOW_WIDTH//2, 460,
+                        (255, 215, pulse), 40, anchor_x="center")
 
         # Subtitle
-        arcade.draw_text("~ The Dark Lord Awaits ~", WINDOW_WIDTH//2, 540,
-                        (180, 180, 255), 16, anchor_x="center")
+        pulse = 130 + int(30 * math.sin(self.timer * 4))
+        arcade.draw_text("~ The Dark Lord Awaits ~", WINDOW_WIDTH//2, 440,
+                        (180, 180, pulse), 16, anchor_x="center")
 
         # Menu options
         for i, choice in enumerate(self.choices):
-            y = 400 - i * 50
+            y = 380 - i * 50
 
             # Highlight selected option
             if i == self.selected:
                 # Selection box
                 pulse = 130 + int(30 * math.sin(self.timer * 4))
                 color = (70, 70, pulse)
+                # color = (255, 255, 255)
 
                 # Draw box outline
                 w, h = 300, 35
@@ -207,7 +205,12 @@ class MenuScreen(arcade.View):
         elif key == arcade.key.ENTER:
             self.handle_choice()
         elif key == arcade.key.ESCAPE:
+            # Only stop music if ESC means quitting the game
+            global music_player
             arcade.close_window()
+            if music_player is not None:
+                arcade.stop_sound(music_player)
+                music_player = None
 
     def handle_choice(self):
         if self.selected == 0:  # Start Adventure
@@ -220,7 +223,11 @@ class MenuScreen(arcade.View):
             about = AboutScreen()
             self.window.show_view(about)
         elif self.selected == 3:  # Quit
+            global music_player
             arcade.close_window()
+            if music_player is not None:
+                arcade.stop_sound(music_player)
+                music_player = None
 
 
 class GameScreen(arcade.View):
@@ -260,7 +267,7 @@ class GameScreen(arcade.View):
 
     def on_key_press(self, key, modifiers):
         if key == arcade.key.ESCAPE:
-            menu = MenuScreen()
+            menu = MenuScreen(initial_selected=0)  # Return to Start option
             self.window.show_view(menu)
 
 
@@ -299,7 +306,7 @@ class SettingsScreen(arcade.View):
 
     def on_key_press(self, key, modifiers):
         if key == arcade.key.ESCAPE:
-            menu = MenuScreen()
+            menu = MenuScreen(initial_selected=1)  # Return to Settings option
             self.window.show_view(menu)
 
 
@@ -356,7 +363,7 @@ class AboutScreen(arcade.View):
 
     def on_key_press(self, key, modifiers):
         if key == arcade.key.ESCAPE:
-            menu = MenuScreen()
+            menu = MenuScreen(initial_selected=2)  # Return to About option
             self.window.show_view(menu)
 
 
