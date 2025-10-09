@@ -242,26 +242,70 @@ class Player(arcade.Sprite):
         self.speed = 200
         self.attack_cooldown = 0
         self.invincible_timer = 0
+        self.facing_right = True
+        self.attack_effect_timer = 0
         
     def draw(self):
         # Draw Link as a simple character
         arcade.draw_rectangle_filled(self.center_x, self.center_y, self.width, self.height, self.color)
         # Draw face
-        arcade.draw_circle_filled(self.center_x - 5, self.center_y + 8, 2, (255, 255, 255))
-        arcade.draw_circle_filled(self.center_x + 5, self.center_y + 8, 2, (255, 255, 255))
-        # Shield
+        face_offset = 5 if self.facing_right else -5
+        arcade.draw_circle_filled(self.center_x - face_offset, self.center_y + 8, 2, (50, 50, 50))
+        arcade.draw_circle_filled(self.center_x + face_offset, self.center_y + 8, 2, (50, 50, 50))
+        # Hat
         arcade.draw_triangle_filled(
-            self.center_x - 18, self.center_y + 10,
-            self.center_x - 18, self.center_y - 10,
-            self.center_x - 8, self.center_y,
+            self.center_x - 12, self.center_y + 14,
+            self.center_x + 12, self.center_y + 14,
+            self.center_x, self.center_y + 22,
+            (40, 160, 40)
+        )
+        # Shield
+        shield_x = -18 if self.facing_right else 18
+        arcade.draw_triangle_filled(
+            self.center_x + shield_x, self.center_y + 10,
+            self.center_x + shield_x, self.center_y - 10,
+            self.center_x + (shield_x + 10 if not self.facing_right else shield_x - 10), self.center_y,
             (100, 150, 255)
         )
+        # Sword on other side
+        if self.attack_effect_timer > 0:
+            sword_x = 18 if self.facing_right else -18
+            arcade.draw_line(
+                self.center_x + sword_x, self.center_y,
+                self.center_x + sword_x + (15 if self.facing_right else -15), self.center_y + 10,
+                (200, 200, 220), 3
+            )
         
     def update(self, delta_time):
         if self.attack_cooldown > 0:
             self.attack_cooldown -= delta_time
         if self.invincible_timer > 0:
             self.invincible_timer -= delta_time
+        if self.attack_effect_timer > 0:
+            self.attack_effect_timer -= delta_time
+
+
+class Particle:
+    def __init__(self, x, y, color, life=1.0):
+        self.x = x
+        self.y = y
+        self.vx = random.uniform(-50, 50)
+        self.vy = random.uniform(20, 100)
+        self.color = color
+        self.life = life
+        self.max_life = life
+        self.size = random.uniform(2, 4)
+        
+    def update(self, dt):
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        self.vy -= 200 * dt  # Gravity
+        self.life -= dt
+        
+    def draw(self):
+        alpha = int(255 * (self.life / self.max_life))
+        color = (*self.color[:3], alpha) if len(self.color) == 4 else self.color
+        arcade.draw_circle_filled(self.x, self.y, self.size, color)
 
 
 class Enemy(arcade.Sprite):
@@ -409,6 +453,9 @@ class GameScreen(arcade.View):
         self.boss_spawned = False
         self.boss = None
         
+        # Visual effects
+        self.particles = []
+        
         # Camera offset for scrolling
         self.camera_x = 0
         self.camera_y = 0
@@ -528,8 +575,10 @@ class GameScreen(arcade.View):
         
         if arcade.key.LEFT in self.keys_pressed or arcade.key.A in self.keys_pressed:
             move_x -= self.player.speed * dt
+            self.player.facing_right = False
         if arcade.key.RIGHT in self.keys_pressed or arcade.key.D in self.keys_pressed:
             move_x += self.player.speed * dt
+            self.player.facing_right = True
         if arcade.key.UP in self.keys_pressed or arcade.key.W in self.keys_pressed:
             move_y += self.player.speed * dt
         if arcade.key.DOWN in self.keys_pressed or arcade.key.S in self.keys_pressed:
@@ -552,9 +601,18 @@ class GameScreen(arcade.View):
         self.camera_x = max(0, min(self.camera_x, 1400 - WINDOW_WIDTH))
         self.camera_y = max(0, min(self.camera_y, 800 - WINDOW_HEIGHT))
         
+        # Update particles
+        for particle in self.particles[:]:
+            particle.update(dt)
+            if particle.life <= 0:
+                self.particles.remove(particle)
+        
         # Update enemies
         for enemy in self.enemies[:]:
             if hasattr(enemy, 'health') and enemy.health <= 0:
+                # Spawn death particles
+                for _ in range(10):
+                    self.particles.append(Particle(enemy.center_x, enemy.center_y, enemy.color))
                 self.enemies.remove(enemy)
                 continue
             enemy.update(dt, self.player.center_x, self.player.center_y)
@@ -564,6 +622,9 @@ class GameScreen(arcade.View):
                 if self.player.invincible_timer <= 0:
                     self.player.health -= enemy.damage
                     self.player.invincible_timer = 1.0
+                    # Spawn damage particles
+                    for _ in range(5):
+                        self.particles.append(Particle(self.player.center_x, self.player.center_y, (200, 50, 50)))
                     if self.player.health <= 0:
                         self.game_state = "lose"
         
@@ -583,6 +644,9 @@ class GameScreen(arcade.View):
                            (self.player.center_y - self.chalice_pos[1])**2)
             if dist < 40:
                 self.has_chalice = True
+                # Spawn celebration particles
+                for _ in range(20):
+                    self.particles.append(Particle(self.chalice_pos[0], self.chalice_pos[1], (255, 215, 0)))
                 self.spawn_boss()
         
         # Check win condition (defeat boss)
@@ -592,36 +656,57 @@ class GameScreen(arcade.View):
     def on_draw(self):
         self.clear()
         
-        # Draw ground/sand
-        for x in range(int(self.camera_x // 50) * 50, int(self.camera_x + WINDOW_WIDTH), 50):
-            for y in range(int(self.camera_y // 50) * 50, int(self.camera_y + WINDOW_HEIGHT), 50):
+        # Draw ground/sand with varying colors
+        for x in range(int(self.camera_x // 50) * 50, int(self.camera_x + WINDOW_WIDTH) + 50, 50):
+            for y in range(int(self.camera_y // 50) * 50, int(self.camera_y + WINDOW_HEIGHT) + 50, 50):
                 color_var = (hash((x, y)) % 20) - 10
                 sand_color = (194 + color_var, 178 + color_var, 128 + color_var)
                 arcade.draw_rectangle_filled(x - self.camera_x, y - self.camera_y, 50, 50, sand_color)
         
-        # Draw water around island
-        arcade.draw_rectangle_filled(700 - self.camera_x, -50 - self.camera_y, 1400, 100, (70, 130, 180))
-        arcade.draw_rectangle_filled(700 - self.camera_x, 850 - self.camera_y, 1400, 100, (70, 130, 180))
-        arcade.draw_rectangle_filled(-50 - self.camera_x, 400 - self.camera_y, 100, 800, (70, 130, 180))
-        arcade.draw_rectangle_filled(1450 - self.camera_x, 400 - self.camera_y, 100, 800, (70, 130, 180))
+        # Draw water around island with wave effect
+        wave_offset = math.sin(self.time * 2) * 5
+        arcade.draw_rectangle_filled(700 - self.camera_x, -50 - self.camera_y + wave_offset, 1400, 100, (70, 130, 180))
+        arcade.draw_rectangle_filled(700 - self.camera_x, 850 - self.camera_y + wave_offset, 1400, 100, (70, 130, 180))
+        arcade.draw_rectangle_filled(-50 - self.camera_x + wave_offset, 400 - self.camera_y, 100, 800, (70, 130, 180))
+        arcade.draw_rectangle_filled(1450 - self.camera_x + wave_offset, 400 - self.camera_y, 100, 800, (70, 130, 180))
+        
+        # Draw some palm trees for atmosphere
+        palm_positions = [(250, 300), (400, 150), (600, 200), (300, 600), (500, 700)]
+        for px, py in palm_positions:
+            # Trunk
+            arcade.draw_rectangle_filled(px - self.camera_x, py - self.camera_y, 8, 40, (139, 90, 43))
+            # Leaves
+            for i in range(6):
+                angle = i * 60
+                leaf_x = px + math.cos(math.radians(angle)) * 15
+                leaf_y = py + 20 + math.sin(math.radians(angle)) * 15
+                arcade.draw_line(px - self.camera_x, py + 20 - self.camera_y, 
+                               leaf_x - self.camera_x, leaf_y - self.camera_y,
+                               (34, 139, 34), 3)
         
         # Draw walls
         for wall in self.walls:
-            wall.draw()
             wall.center_x -= self.camera_x
             wall.center_y -= self.camera_y
             wall.draw()
             wall.center_x += self.camera_x
             wall.center_y += self.camera_y
             
-        # Draw chalice
+        # Draw chalice with enhanced glow
         if self.chalice_pos and not self.has_chalice:
             x, y = self.chalice_pos
+            # Multiple glow layers
+            for i in range(3):
+                glow = 0.3 + 0.7 * math.sin(self.time * 3 + i * 0.5)
+                radius = 30 + i * 10
+                alpha = int(50 * glow)
+                arcade.draw_circle_filled(x - self.camera_x, y - self.camera_y, radius * glow, 
+                                        (255, 215, 0, alpha))
+            # Main chalice
             arcade.draw_circle_filled(x - self.camera_x, y - self.camera_y, 15, (255, 215, 0))
             arcade.draw_circle_outline(x - self.camera_x, y - self.camera_y, 15, (200, 170, 0), 3)
-            # Glow effect
-            glow = 0.5 + 0.5 * math.sin(self.time * 3)
-            arcade.draw_circle_filled(x - self.camera_x, y - self.camera_y, 20 * glow, (255, 215, 0, 100))
+            # Cup shape
+            arcade.draw_rectangle_filled(x - self.camera_x, y - self.camera_y - 5, 12, 10, (255, 215, 0))
             
         # Draw NPCs
         for npc in self.npcs:
@@ -638,6 +723,14 @@ class GameScreen(arcade.View):
                                npc.center_x - self.camera_x, 
                                npc.center_y - self.camera_y + 25, 
                                (255, 255, 255), 10, anchor_x="center")
+        
+        # Draw particles
+        for particle in self.particles:
+            particle.x -= self.camera_x
+            particle.y -= self.camera_y
+            particle.draw()
+            particle.x += self.camera_x
+            particle.y += self.camera_y
         
         # Draw enemies
         for enemy in self.enemies:
@@ -659,6 +752,10 @@ class GameScreen(arcade.View):
                     enemy.center_x - self.camera_x - bar_width//2 + (bar_width * health_ratio)//2, 
                     enemy.center_y - self.camera_y + 60,
                     bar_width * health_ratio, 8, (200, 50, 50))
+                arcade.draw_text("BOSS", 
+                               enemy.center_x - self.camera_x, 
+                               enemy.center_y - self.camera_y + 75,
+                               (255, 200, 0), 12, anchor_x="center", bold=True)
         
         # Draw player
         self.player.center_x -= self.camera_x
@@ -669,21 +766,26 @@ class GameScreen(arcade.View):
         self.player.center_y += self.camera_y
         
         # Draw HUD
-        # Health bar
+        # Health bar with border
+        arcade.draw_rectangle_filled(100, WINDOW_HEIGHT - 30, 204, 24, (50, 50, 50))
         arcade.draw_rectangle_filled(100, WINDOW_HEIGHT - 30, 200, 20, (100, 100, 100))
         health_ratio = max(0, self.player.health / self.player.max_health)
+        health_color = (50, 200, 50) if health_ratio > 0.5 else (200, 200, 50) if health_ratio > 0.25 else (200, 50, 50)
         arcade.draw_rectangle_filled(100 - 100 + 100 * health_ratio, WINDOW_HEIGHT - 30, 
-                                    200 * health_ratio, 20, (50, 200, 50))
+                                    200 * health_ratio, 20, health_color)
         arcade.draw_text(f"HP: {int(self.player.health)}/{self.player.max_health}", 
-                        100, WINDOW_HEIGHT - 35, (255, 255, 255), 12, anchor_x="center")
+                        100, WINDOW_HEIGHT - 35, (255, 255, 255), 12, anchor_x="center", bold=True)
         
-        # Objective
+        # Objective with fancy styling
         if not self.has_chalice:
+            arcade.draw_rectangle_filled(WINDOW_WIDTH//2, WINDOW_HEIGHT - 20, 400, 30, (0, 0, 0, 150))
             arcade.draw_text("Objective: Find the Chalice in the Old Palace", 
-                           WINDOW_WIDTH//2, WINDOW_HEIGHT - 20, (255, 255, 255), 14, anchor_x="center")
+                           WINDOW_WIDTH//2, WINDOW_HEIGHT - 23, (255, 215, 0), 14, anchor_x="center", bold=True)
         elif self.boss_spawned and self.boss and self.boss.health > 0:
+            pulse = 200 + int(55 * math.sin(self.time * 5))
+            arcade.draw_rectangle_filled(WINDOW_WIDTH//2, WINDOW_HEIGHT - 20, 400, 30, (0, 0, 0, 150))
             arcade.draw_text("Objective: Defeat the Palace Guardian!", 
-                           WINDOW_WIDTH//2, WINDOW_HEIGHT - 20, (255, 200, 100), 14, anchor_x="center")
+                           WINDOW_WIDTH//2, WINDOW_HEIGHT - 23, (pulse, 100, 100), 14, anchor_x="center", bold=True)
         
         # Controls hint
         arcade.draw_text("WASD/Arrows: Move  SPACE: Attack/Talk  ESC: Menu", 
@@ -692,45 +794,57 @@ class GameScreen(arcade.View):
         # Dialogue box
         if self.show_dialogue and self.dialogue_index < len(self.dialogue_text):
             box_height = 120
+            # Draw semi-transparent background
             arcade.draw_rectangle_filled(WINDOW_WIDTH//2, box_height//2 + 20, 
-                                        WINDOW_WIDTH - 100, box_height, (20, 20, 40))
+                                        WINDOW_WIDTH - 100, box_height, (20, 20, 40, 230))
             arcade.draw_rectangle_outline(WINDOW_WIDTH//2, box_height//2 + 20, 
-                                         WINDOW_WIDTH - 100, box_height, (255, 255, 255), 3)
+                                         WINDOW_WIDTH - 100, box_height, (255, 215, 0), 3)
             
             text = self.dialogue_text[self.dialogue_index]
             arcade.draw_text(text, WINDOW_WIDTH//2, box_height//2 + 30, 
                            (255, 255, 255), 14, anchor_x="center", width=WINDOW_WIDTH - 150, 
                            align="center", multiline=True)
             
-            arcade.draw_text("Press SPACE to continue", WINDOW_WIDTH//2, 30, 
-                           (150, 150, 150), 10, anchor_x="center")
+            # Blinking continue indicator
+            if int(self.time * 3) % 2:
+                arcade.draw_text("Press SPACE to continue", WINDOW_WIDTH//2, 30, 
+                               (255, 215, 0), 10, anchor_x="center", bold=True)
         
         # Game over screens
         if self.game_state == "win":
             arcade.draw_rectangle_filled(WINDOW_WIDTH//2, WINDOW_HEIGHT//2, 
                                         WINDOW_WIDTH, WINDOW_HEIGHT, (0, 0, 0, 200))
+            
+            # Victory animation
+            scale = 1.0 + 0.1 * math.sin(self.time * 3)
             arcade.draw_text("VICTORY!", WINDOW_WIDTH//2, WINDOW_HEIGHT//2 + 50, 
-                           (255, 215, 0), 48, anchor_x="center")
+                           (255, 215, 0), int(48 * scale), anchor_x="center", bold=True)
             arcade.draw_text("You defeated the Palace Guardian!", 
                            WINDOW_WIDTH//2, WINDOW_HEIGHT//2, 
                            (255, 255, 255), 20, anchor_x="center")
             arcade.draw_text("The Chalice is yours!", 
                            WINDOW_WIDTH//2, WINDOW_HEIGHT//2 - 40, 
                            (255, 255, 255), 20, anchor_x="center")
+            arcade.draw_text("The path to defeat the Lich King is now open!", 
+                           WINDOW_WIDTH//2, WINDOW_HEIGHT//2 - 80, 
+                           (150, 255, 150), 16, anchor_x="center")
             arcade.draw_text("Press ESC to return to menu", 
-                           WINDOW_WIDTH//2, WINDOW_HEIGHT//2 - 100, 
+                           WINDOW_WIDTH//2, WINDOW_HEIGHT//2 - 120, 
                            (200, 200, 200), 14, anchor_x="center")
                            
         elif self.game_state == "lose":
             arcade.draw_rectangle_filled(WINDOW_WIDTH//2, WINDOW_HEIGHT//2, 
                                         WINDOW_WIDTH, WINDOW_HEIGHT, (0, 0, 0, 200))
             arcade.draw_text("GAME OVER", WINDOW_WIDTH//2, WINDOW_HEIGHT//2 + 50, 
-                           (200, 50, 50), 48, anchor_x="center")
+                           (200, 50, 50), 48, anchor_x="center", bold=True)
             arcade.draw_text("You were defeated...", 
                            WINDOW_WIDTH//2, WINDOW_HEIGHT//2, 
                            (255, 255, 255), 20, anchor_x="center")
+            arcade.draw_text("The island's guardians proved too strong.", 
+                           WINDOW_WIDTH//2, WINDOW_HEIGHT//2 - 40, 
+                           (200, 200, 200), 16, anchor_x="center")
             arcade.draw_text("Press ESC to return to menu", 
-                           WINDOW_WIDTH//2, WINDOW_HEIGHT//2 - 60, 
+                           WINDOW_WIDTH//2, WINDOW_HEIGHT//2 - 80, 
                            (200, 200, 200), 14, anchor_x="center")
 
     def on_key_press(self, key, modifiers):
@@ -753,6 +867,7 @@ class GameScreen(arcade.View):
             elif self.game_state == "playing" and self.player.attack_cooldown <= 0:
                 # Attack nearby enemies
                 self.player.attack_cooldown = 0.5
+                self.player.attack_effect_timer = 0.2
                 for enemy in self.enemies:
                     dist = math.sqrt((self.player.center_x - enemy.center_x)**2 + 
                                    (self.player.center_y - enemy.center_y)**2)
@@ -762,6 +877,9 @@ class GameScreen(arcade.View):
                         if enemy.invincible_timer <= 0:
                             enemy.health -= self.player.damage
                             enemy.invincible_timer = 0.3
+                            # Spawn hit particles
+                            for _ in range(5):
+                                self.particles.append(Particle(enemy.center_x, enemy.center_y, (255, 200, 100)))
                             
     def on_key_release(self, key, modifiers):
         self.keys_pressed.discard(key)
