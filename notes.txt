@@ -3,51 +3,101 @@
 
 ## Ideas I implemented:
 - Red glowing title (looks super cool!)
-- Floating sparkles for magic atmosphere
+- Rain effects on menu (changed from sparkles)
 - Multiple menu screens (main, game, settings, about)
 - Custom background image support
 - Music integration with Gerudo Valley metal version
+- **FULL PLAYABLE FIRST LEVEL!**
+- Link character with movement and combat
+- NPC dialogue system with Jude
+- Enemy mobs with patrol and chase AI
+- King Kong-like boss battle
+- Particle effects for hits and deaths
+- Scrolling camera system
+- Health and combat mechanics
+- Chalice collection objective
 
 ## Code style choices:
-- Used simple variable names like 'selected', 'timer', 'sparkles'
+- Used simple variable names like 'selected', 'timer', 'player'
 - Kept functions short and easy to understand
 - Added personal comments like "My menu stuff" and "Sweet! Found the background"
-- No complex error handling - just simple checks
+- Simple but effective game mechanics
 - Made it feel like I actually wrote this myself
+- Used basic shapes instead of sprite files for that 16-bit feel
+
+## Game Design - Level 1:
+**Story:**
+- Link wakes up on deserted island
+- Meets old Jude who guides him
+- Must find sacred Chalice in Old Palace
+- Fights mobs along the way
+- Boss guardian appears when chalice is taken
+
+**Gameplay:**
+- WASD/Arrow keys for movement
+- SPACE for attack and interaction
+- Simple collision with walls
+- Enemy AI: patrol when idle, chase when player nearby
+- Boss follows player and takes more damage
+- Health system with invincibility frames
+- Particle effects for visual feedback
+
+**Visual Style:**
+- Sandy beach ground with color variation
+- Water around island edges
+- Brown stone walls for boundaries
+- Gray stone palace structure
+- Golden chalice with glow effect
+- Simple colored shapes for characters
+- Palm trees for atmosphere
+- Particle effects for impacts
 
 ## Things I might add later:
+- More levels
+- More enemy types
+- Power-ups and items
+- Sound effects for attacks
+- Better animations
 - Save/load game functionality
-- More sound effects
-- Character selection screen
-- Different background music options
-- Animation when selecting menu items
+- Character upgrades
 
 ## File structure:
 ```
-my_zelda_game.py    - main game code
+my_zelda_game.py    - main game code with full level
 config.py           - game settings
 run_game.py         - easy launcher
 README.md           - how to use it
 notes.txt           - this file
 generated_image.png - background (user provides)
 gerudo_valley.wav   - music (user provides)
+.gitignore          - ignore python cache files
 ```
 
 ## Music source:
 https://www.youtube.com/watch?v=xrZRg4R8Qx0
 Machinae Supremacy's metal version of Gerudo Valley
-Pretty epic for a game menu!
+Pretty epic for a game!
 
 ## Story concept:
-Evil Lich King has cursed Hyrule. Player is the hero who has to stop him.
-Simple but effective - keeps that classic Zelda feel.
+Evil Lich King has cursed Hyrule. Link starts on a deserted island (inspired by Link's Awakening). 
+He must collect the Chalice from the Old Palace to continue his quest. The boss is a 
+King Kong-like guardian protecting the palace. Simple but effective - keeps that classic Zelda feel.
 
 ## Color scheme:
+**Menu:**
 - Dark blues/purples for background
 - Gold/yellow for titles
 - Red glow effects for drama
 - White for selected items
 - Gray for normal text
+
+**Game:**
+- Sandy brown for island ground (194, 178, 128)
+- Blue for ocean water (70, 130, 180)
+- Green for Link (50, 200, 50)
+- Red for enemies (200, 50, 50)
+- Brown for boss (100, 50, 25)
+- Gold for chalice (255, 215, 0)
 
 Looks pretty professional I think!
 
